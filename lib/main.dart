@@ -5,9 +5,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-double kSize = 50.0;
+double _kCircleSize = 50.0;
 
-main() => runApp(Roulette());
+Color get _randomColor =>
+    Color((Random().nextDouble() * 0xFFFFFF).toInt() << 0).withOpacity(1.0);
+
+void main() => runApp(Roulette());
 
 class Roulette extends StatefulWidget {
   @override
@@ -15,139 +18,195 @@ class Roulette extends StatefulWidget {
 }
 
 class RouletteState extends State<Roulette> {
-  List<Widget> items;
-  Timer timer;
-  Widget picked;
+  List<Widget> _items;
+  Timer _timer;
+  Widget _picked;
+
+  bool get hasPickedItem => _picked != null;
 
   @override
   initState() {
     super.initState();
-    items = [];
-    picked = null;
+    _items = [];
+    _picked = null;
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(home: Scaffold(body: picked == null ? game() : result()));
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(body: hasPickedItem ? _buildResult() : _buildGame()),
+    );
+  }
 
-  game() {
+  Widget _buildGame() {
     return Container(
+      color: Colors.black,
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: _gestureRecognizer(),
+        child: (_items.length > 0)
+            ? Stack(children: _items)
+            : Center(
+                child: Text(
+                  "Tap!!!",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+      ),
+    );
+  }
+
+  _gestureRecognizer() {
+    return {
+      ImmediateMultiDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+              ImmediateMultiDragGestureRecognizer>(
+          () => ImmediateMultiDragGestureRecognizer(),
+          (ImmediateMultiDragGestureRecognizer instance) =>
+              instance..onStart = _onDragStart)
+    };
+  }
+
+  Widget _buildResult() {
+    return GestureDetector(
+      onTap: () => setState(() => _picked = null),
+      child: Container(
         color: Colors.black,
-        child: RawGestureDetector(
-            behavior: HitTestBehavior.opaque,
-            gestures: recognizer(),
-            child: (items.length > 0)
-                ? Stack(children: items)
-                : Center(child: Text("Tap!!!", style: TextStyle(color: Colors.white)))));
+        child: Stack(
+          children: [_picked],
+        ),
+      ),
+    );
   }
 
-  recognizer() => {
-    ImmediateMultiDragGestureRecognizer:
-    GestureRecognizerFactoryWithHandlers<
-        ImmediateMultiDragGestureRecognizer>(
-            () => ImmediateMultiDragGestureRecognizer(),
-            (ImmediateMultiDragGestureRecognizer instance) => instance..onStart = onDragStart)
-  };
-
-  result() => GestureDetector(
-      onTap: () => setState(() => picked = null),
-      child: Container(color: Colors.black, child: Stack(children: [picked])));
-
-  Drag onDragStart(Offset position) {
-    items.add(Item(
-        key: GlobalKey<ItemState>(),
-        pos: position,
-        color: color()));
+  Drag _onDragStart(Offset position) {
+    _items.add(
+      _DragItem(
+        key: GlobalKey<_DragItemState>(),
+        position: position,
+        color: _randomColor,
+      ),
+    );
     setState(() {});
-    run();
-    return Handler(items.last, dragUpdate, dragEnd);
+    _restartGame();
+    return _DragHandler(_items.last, _dragUpdate, _dragEnd);
   }
 
-  color() => Color((Random().nextDouble() * 0xFFFFFF).toInt() << 0).withOpacity(1.0);
-
-  dragUpdate(Widget item, Offset position) {
-    (item.key as GlobalKey<ItemState>).currentState?.update(position);
+  void _dragUpdate(Widget item, Offset position) {
+    (item.key as GlobalKey<_DragItemState>).currentState?._update(position);
   }
 
-  dragEnd(Widget item) {
-    items.remove(item);
+  void _dragEnd(Widget item) {
+    _items.remove(item);
     setState(() {});
-    run();
+    _restartGame();
   }
 
-  run() {
-    timer?.cancel();
-    if (items.length > 1) timer = Timer.periodic(Duration(seconds: 3), (Timer timer) {
-      timer.cancel();
-      finish();
-    });
+  void _restartGame() {
+    _timer?.cancel();
+    if (_items.length > 1)
+      _timer = Timer.periodic(Duration(seconds: 3), (Timer timer) {
+        timer.cancel();
+        _finishGame();
+      });
   }
 
-  finish() {
-    picked = items[Random().nextInt(items.length)];
-    items.clear();
+  void _finishGame() {
+    _picked = _items[Random().nextInt(_items.length)];
+    _items.clear();
     setState(() {});
   }
 }
 
-class Item extends StatefulWidget {
+class _DragItem extends StatefulWidget {
   final Color color;
-  final Offset pos;
+  final Offset position;
 
-  Item({Key key, @required this.pos, @required this.color}) : super(key: key);
+  _DragItem({Key key, @required this.position, @required this.color})
+      : super(key: key);
 
   @override
-  State<StatefulWidget> createState() => ItemState();
+  State<StatefulWidget> createState() => _DragItemState();
 }
 
-class ItemState extends State<Item> with SingleTickerProviderStateMixin {
-  AnimationController ctrl;
-  Offset pos;
+class _DragItemState extends State<_DragItem>
+    with SingleTickerProviderStateMixin {
+  AnimationController _controller;
+  Offset _position;
+
+  void _update(Offset position) => setState(() => this._position = position);
 
   @override
-  initState() {
+  void initState() {
     super.initState();
-    ctrl = AnimationController(vsync: this);
-    pos = widget.pos;
-    WidgetsBinding.instance.addPostFrameCallback((callback) => ctrl.repeat(period: Duration(seconds: 1)));
+    _controller = AnimationController(vsync: this);
+    _position = widget.position;
+    WidgetsBinding.instance.addPostFrameCallback(
+        (callback) => _controller.repeat(period: Duration(seconds: 1)));
   }
 
   @override
-  dispose() {
-    ctrl.dispose();
+  void dispose() {
+    _controller.dispose();
     super.dispose();
   }
 
-  update(Offset position) => setState(() => this.pos = position);
-
   @override
-  Widget build(BuildContext context) => Positioned(
-      top: pos.dy - kSize, left: pos.dx - kSize,
-      child: Center(child: child()));
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: _position.dy - _kCircleSize,
+      left: _position.dx - _kCircleSize,
+      child: Center(
+        child: _buildPointer(),
+      ),
+    );
+  }
 
-  child() => Stack(children: [
-    Container(
-        child: CircularProgressIndicator(
-            strokeWidth: 8.0, valueColor: AlwaysStoppedAnimation(widget.color)),
-        width: kSize * 2, height: kSize * 2),
-    AnimatedBuilder(
-        animation: ctrl, builder: (context, child) => ScaleTransition(scale: ctrl, child: child),
-        child: Container(
-            decoration: BoxDecoration(
-                border: Border.all(color: widget.color, width: kSize),
-                shape: BoxShape.circle)))
-  ]);
+  Widget _buildPointer() {
+    return Stack(children: [
+      _buildOuterCircle(),
+      _buildInnerCircle(),
+    ]);
+  }
+
+  Widget _buildOuterCircle() {
+    return Container(
+      child: CircularProgressIndicator(
+        strokeWidth: 8.0,
+        valueColor: AlwaysStoppedAnimation(widget.color),
+      ),
+      width: _kCircleSize * 2,
+      height: _kCircleSize * 2,
+    );
+  }
+
+  Widget _buildInnerCircle() {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) =>
+          ScaleTransition(scale: _controller, child: child),
+      child: Container(
+        decoration: BoxDecoration(
+            border: Border.all(color: widget.color, width: _kCircleSize),
+            shape: BoxShape.circle),
+      ),
+    );
+  }
 }
 
-class Handler extends Drag {
-  Handler(this.item, this.onUpdate, this.onEnd);
+typedef OnDragUpdate = Function(Widget item, Offset pos);
+typedef OnDragEnd = Function(Widget item);
 
-  final Function(Widget item, Offset pos) onUpdate;
-  final Function(Widget item) onEnd;
+class _DragHandler extends Drag {
+  _DragHandler(this.item, this.onDragUpdate, this.onDragEnd);
+
+  final OnDragUpdate onDragUpdate;
+  final OnDragEnd onDragEnd;
   final Widget item;
 
   @override
-  update(DragUpdateDetails details) => onUpdate(item, details.globalPosition);
+  void update(DragUpdateDetails details) =>
+      onDragUpdate(item, details.globalPosition);
 
   @override
-  end(DragEndDetails details) => onEnd(item);
+  void end(DragEndDetails details) => onDragEnd(item);
 }

@@ -1,3 +1,8 @@
+# Flutter create
+This is a flutter project for [Flutter Create](https://flutter.dev/create)
+
+# Tap Roulette
+
 This app randomly pick someone from a group of people
 
 ## How to play?
